@@ -144,20 +144,20 @@ export default function Game({
   const handleResetView = () => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-    const fitZoom = Math.min(1, rect.width / BATTLEFIELD_WIDTH);
+    const fitZoom = Math.min(rect.width / BATTLEFIELD_WIDTH, rect.height / 420);
     setZoom(fitZoom);
     setPanX((rect.width - BATTLEFIELD_WIDTH * fitZoom) / 2);
-    setPanY(0);
+    setPanY((rect.height - 420 * fitZoom) / 2);
   };
 
   useEffect(() => {
     const handleResize = () => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      const fitZoom = Math.min(1, rect.width / BATTLEFIELD_WIDTH);
+      const fitZoom = Math.min(rect.width / BATTLEFIELD_WIDTH, rect.height / 420);
       setZoom(fitZoom);
       setPanX((rect.width - BATTLEFIELD_WIDTH * fitZoom) / 2);
-      setPanY(0);
+      setPanY((rect.height - 420 * fitZoom) / 2);
     };
 
     window.addEventListener('resize', handleResize);
@@ -459,7 +459,7 @@ export default function Game({
             width: `${BATTLEFIELD_WIDTH}px`,
             height: '420px',
             position: 'absolute',
-            bottom: '80px',
+            top: '0',
             left: '0',
           }}
           className="transition-transform duration-75 ease-out"
@@ -508,22 +508,22 @@ export default function Game({
       </div>
 
       {/* Controls: Responsive flex-wrap and horizontal scrolling for narrow or portrait screens */}
-      <div className="h-44 bg-zinc-900 border-t border-white/10 p-4 flex gap-4 overflow-x-auto scrollbar-none items-center justify-start md:justify-center">
+      <div className="h-32 sm:h-40 bg-zinc-900 border-t border-white/10 p-2 sm:p-4 flex gap-3 sm:gap-4 overflow-x-auto scrollbar-none items-center justify-start md:justify-center">
         {saveData.team.map((charId, i) => {
           const char = charId ? (saveData.ownedCharacterDetails[charId] || STARTER_CHARACTERS.find(c => c.id === charId)) : null;
-          if (!char) return <div key={i} className="w-28 h-32 shrink-0 bg-white/5 rounded-2xl border border-dashed border-white/10" />;
+          if (!char) return <div key={i} className="w-20 h-24 sm:w-28 sm:h-32 shrink-0 bg-white/5 rounded-xl sm:rounded-2xl border border-dashed border-white/10" />;
           
           const cd = state.cooldowns[char.id] || 0;
           const canAfford = state.money >= char.cost;
           const isReady = cd === 0 && canAfford;
-
+ 
           return (
             <motion.button
               key={i}
               whileTap={isReady ? { scale: 0.95 } : {}}
               onClick={() => spawnUnit(char.id)}
               disabled={!isReady}
-              className={`w-28 h-32 shrink-0 rounded-2xl border flex flex-col items-center justify-between p-2.5 relative overflow-hidden transition-all ${
+              className={`w-20 h-24 sm:w-28 sm:h-32 shrink-0 rounded-xl sm:rounded-2xl border flex flex-col items-center justify-between p-1.5 sm:p-2.5 relative overflow-hidden transition-all ${
                 isReady ? 'bg-white/10 border-emerald-500/50 cursor-pointer' : 'bg-black/40 border-white/5 opacity-50 cursor-not-allowed'
               }`}
             >
@@ -535,10 +535,10 @@ export default function Game({
                 />
               )}
               
-              <SafeAnimeImage src={char.gifUrl} category="character" className="w-14 h-14 object-contain" />
+              <SafeAnimeImage src={char.gifUrl} category="character" className="w-10 h-10 sm:w-14 sm:h-14 object-contain" />
               <div className="text-center w-full">
-                <div className="text-[9px] font-bold uppercase opacity-50 truncate">{char.name}</div>
-                <div className="text-xs font-bold text-emerald-400">${char.cost}</div>
+                <div className="text-[8px] sm:text-[9px] font-bold uppercase opacity-50 truncate">{char.name}</div>
+                <div className="text-[10px] sm:text-xs font-bold text-emerald-400">${char.cost}</div>
               </div>
             </motion.button>
           );

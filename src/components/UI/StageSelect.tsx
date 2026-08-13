@@ -15,15 +15,15 @@ export default function StageSelect({
   const stages = Array.from({ length: unlocked + 5 }, (_, i) => i + 1);
 
   return (
-    <div className="w-full h-full bg-zinc-950 p-12 flex flex-col">
-      <div className="flex items-center gap-4 mb-12">
+    <div className="w-full h-full bg-zinc-950 p-4 sm:p-12 flex flex-col">
+      <div className="flex items-center gap-4 mb-6 sm:mb-12">
         <button onClick={onBack} className="p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors">
           <ChevronLeft />
         </button>
-        <h2 className="text-4xl font-bold italic">STAGE <span className="text-emerald-400">SELECT</span></h2>
+        <h2 className="text-2xl sm:text-4xl font-bold italic">STAGE <span className="text-emerald-400">SELECT</span></h2>
       </div>
 
-      <div className="grid grid-cols-5 gap-6 overflow-y-auto pr-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6 overflow-y-auto pr-2 scrollbar-none">
         {stages.map((lvl) => {
           const isLocked = lvl > unlocked;
           return (

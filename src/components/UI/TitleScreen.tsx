@@ -20,7 +20,7 @@ export default function TitleScreen({ onStart }: { onStart: () => void }) {
       <motion.h1 
         initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="text-8xl font-black text-white italic tracking-tighter z-10 drop-shadow-[0_5px_15px_rgba(0,0,0,0.8)]"
+        className="text-4xl sm:text-7xl md:text-8xl font-black text-white italic tracking-tighter z-10 drop-shadow-[0_5px_15px_rgba(0,0,0,0.8)] text-center px-4"
       >
         ANIME BATTLE <span className="text-emerald-400">FRONTIER</span>
       </motion.h1>
