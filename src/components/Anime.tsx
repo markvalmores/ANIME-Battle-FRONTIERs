@@ -1,23 +1,96 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { getWallpaperUrl } from '../services/api';
+import { getWallpaperUrl, fetchAnimeImage } from '../services/api';
+
+export const SafeAnimeImage = ({ 
+  src, 
+  category = 'character', 
+  className, 
+  alt = 'Anime Asset',
+  style,
+  ...props 
+}: { 
+  src: string; 
+  category?: 'character' | 'background' | 'enemy' | 'castle'; 
+  className?: string; 
+  alt?: string;
+  style?: React.CSSProperties;
+  [key: string]: any;
+}) => {
+  const [currentSrc, setCurrentSrc] = useState(src);
+  const [retryCount, setRetryCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setCurrentSrc(src);
+    setRetryCount(0);
+    setLoading(true);
+  }, [src]);
+
+  const handleError = async () => {
+    if (retryCount >= 5) {
+      const fallbacks = [
+        'https://nekos.best/api/v2/waifu/0001.png',
+        'https://nekos.best/api/v2/neko/0001.png',
+        'https://nekos.best/api/v2/kitsune/0001.png',
+        'https://nekos.best/api/v2/husbando/0001.png'
+      ];
+      setCurrentSrc(fallbacks[Math.floor(Math.random() * fallbacks.length)]);
+      return;
+    }
+
+    try {
+      const newUrl = await fetchAnimeImage(category);
+      setRetryCount(prev => prev + 1);
+      setCurrentSrc(newUrl);
+    } catch (err) {
+      console.error('Failed to fetch fallback anime image:', err);
+    }
+  };
+
+  return (
+    <img 
+      src={currentSrc} 
+      className={`${className} ${loading ? 'opacity-80 animate-pulse' : 'opacity-100'}`}
+      onError={handleError}
+      onLoad={() => setLoading(false)}
+      referrerPolicy="no-referrer"
+      alt={alt}
+      style={style}
+      {...props}
+    />
+  );
+};
 
 export const AnimeGif = ({ url, className }: { url: string, className?: string }) => (
-  <img src={url} className={className} referrerPolicy="no-referrer" alt="Anime GIF" />
+  <SafeAnimeImage src={url} category="character" className={className} alt="Anime GIF" />
 );
 
 export const AnimeBackground = ({ level, className }: { level: number, className?: string }) => {
   const [bg, setBg] = useState<string>('');
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     getWallpaperUrl().then(setBg);
   }, [level]);
+
+  const handleBgError = async () => {
+    if (retryCount >= 5) return;
+    try {
+      const newUrl = await getWallpaperUrl();
+      setRetryCount(prev => prev + 1);
+      setBg(newUrl);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   return (
     <div 
       className={`absolute inset-0 bg-cover bg-center transition-all duration-1000 ${className}`}
       style={{ backgroundImage: bg ? `url(${bg})` : 'none' }}
     >
+      {bg && <img src={bg} className="hidden" onError={handleBgError} referrerPolicy="no-referrer" alt="" />}
       <div className="absolute inset-0 bg-black/30" />
     </div>
   );
@@ -25,10 +98,10 @@ export const AnimeBackground = ({ level, className }: { level: number, className
 
 export const AnimeCharacter = ({ url, className, isEnemy = false }: { url: string, className?: string, isEnemy?: boolean }) => {
   return (
-    <img 
+    <SafeAnimeImage 
       src={url} 
+      category={isEnemy ? 'enemy' : 'character'}
       className={`${className} ${isEnemy ? 'scale-x-[-1]' : ''}`} 
-      referrerPolicy="no-referrer" 
       alt="Anime Character" 
     />
   );
@@ -57,14 +130,18 @@ export const AnimeCastle = ({ isPlayer, level, className, customUrl }: { isPlaye
     
   return (
     <div className={`relative ${className} flex flex-col items-center justify-end group`}>
-      <motion.img 
+      <motion.div 
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        src={castleUrl} 
-        className={`w-full h-auto object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)] transition-transform duration-500 group-hover:scale-105 ${isPlayer ? '' : 'scale-x-[-1]'}`}
-        referrerPolicy="no-referrer"
-        alt="Castle"
-      />
+        className="w-full flex justify-center"
+      >
+        <SafeAnimeImage 
+          src={castleUrl} 
+          category="castle"
+          className={`w-full h-auto object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)] transition-transform duration-500 group-hover:scale-105 ${isPlayer ? '' : 'scale-x-[-1]'}`}
+          alt="Castle"
+        />
+      </motion.div>
       <div className={`absolute inset-0 bg-gradient-to-t ${isPlayer ? 'from-emerald-500/10' : 'from-red-500/10'} to-transparent rounded-b-xl pointer-events-none`} />
     </div>
   );

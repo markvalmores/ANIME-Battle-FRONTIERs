@@ -4,7 +4,7 @@ import { GameState, SaveData, ActiveUnit, ActiveEnemy, Character, Enemy } from '
 import { playSound, sounds } from '../../services/audio';
 import { BATTLEFIELD_WIDTH, SPAWN_X_PLAYER, SPAWN_X_ENEMY, BASE_HP, STARTER_CHARACTERS, ENEMIES } from '../../constants';
 import { getBackgroundUrl, generateStageAssets } from '../../services/api';
-import { AnimeBackground, AnimeCharacter, AnimeCastle, AnimeGround } from '../Anime';
+import { AnimeBackground, AnimeCharacter, AnimeCastle, AnimeGround, SafeAnimeImage } from '../Anime';
 import { Coins, Heart, Pause, Play, Home, RefreshCcw, Clock } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -43,6 +43,129 @@ export default function Game({
   const [bgUrl, setBgUrl] = useState<string>('');
   const [stageAssets, setStageAssets] = useState<{ playerCastle: string, enemyCastle: string, enemies: string[] } | null>(null);
   const [isGenerating, setIsGenerating] = useState(true);
+
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const panStartRef = useRef({ x: 0, y: 0 });
+  const touchStartRef = useRef({ x: 0, y: 0, distance: 0 });
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    isDraggingRef.current = true;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    panStartRef.current = { x: panX, y: panY };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDraggingRef.current) return;
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+    setPanX(panStartRef.current.x + dx);
+    setPanY(panStartRef.current.y + dy);
+  };
+
+  const handleMouseUp = () => {
+    isDraggingRef.current = false;
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      isDraggingRef.current = true;
+      const touch = e.touches[0];
+      dragStartRef.current = { x: touch.clientX, y: touch.clientY };
+      panStartRef.current = { x: panX, y: panY };
+    } else if (e.touches.length === 2) {
+      isDraggingRef.current = false;
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+      touchStartRef.current = {
+        x: (touch1.clientX + touch2.clientX) / 2,
+        y: (touch1.clientY + touch2.clientY) / 2,
+        distance
+      };
+      panStartRef.current = { x: panX, y: panY };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 1 && isDraggingRef.current) {
+      const touch = e.touches[0];
+      const dx = touch.clientX - dragStartRef.current.x;
+      const dy = touch.clientY - dragStartRef.current.y;
+      setPanX(panStartRef.current.x + dx);
+      setPanY(panStartRef.current.y + dy);
+    } else if (e.touches.length === 2) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+      
+      const factor = distance / touchStartRef.current.distance;
+      const newZoom = Math.min(2.5, Math.max(0.3, zoom * factor));
+      setZoom(newZoom);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    isDraggingRef.current = false;
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    const zoomFactor = 1.1;
+    let newZoom = e.deltaY < 0 ? zoom * zoomFactor : zoom / zoomFactor;
+    newZoom = Math.min(2.5, Math.max(0.3, newZoom));
+    
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const dx = mouseX - panX;
+    const dy = mouseY - panY;
+    const ratio = newZoom / zoom;
+
+    setPanX(mouseX - dx * ratio);
+    setPanY(mouseY - dy * ratio);
+    setZoom(newZoom);
+  };
+
+  const handleZoomIn = () => {
+    setZoom(z => Math.min(2.5, z * 1.2));
+  };
+
+  const handleZoomOut = () => {
+    setZoom(z => Math.max(0.3, z / 1.2));
+  };
+
+  const handleResetView = () => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const fitZoom = Math.min(1, rect.width / BATTLEFIELD_WIDTH);
+    setZoom(fitZoom);
+    setPanX((rect.width - BATTLEFIELD_WIDTH * fitZoom) / 2);
+    setPanY(0);
+  };
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const fitZoom = Math.min(1, rect.width / BATTLEFIELD_WIDTH);
+      setZoom(fitZoom);
+      setPanX((rect.width - BATTLEFIELD_WIDTH * fitZoom) / 2);
+      setPanY(0);
+    };
+
+    window.addEventListener('resize', handleResize);
+    if (!isGenerating) {
+      setTimeout(handleResize, 150);
+    }
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isGenerating]);
 
   useEffect(() => {
     const loadAssets = async () => {
@@ -283,27 +406,85 @@ export default function Game({
 
   return (
     <div className="w-full h-full relative flex flex-col overflow-hidden">
-      {/* Battlefield */}
-      <div className="flex-1 relative overflow-hidden">
+      {/* Battlefield Viewport Container */}
+      <div 
+        ref={containerRef}
+        className="flex-1 relative overflow-hidden select-none cursor-grab active:cursor-grabbing touch-none"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onWheel={handleWheel}
+      >
+        {/* Dynamic self-healing Wallpaper Background (Static layer, does not transform) */}
         <AnimeBackground level={level} />
-        <AnimeGround level={level} />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none" />
         
-        {/* Bases */}
-        <Base x={SPAWN_X_PLAYER} hp={state.baseHp} maxHp={BASE_HP} level={level} isPlayer customUrl={stageAssets?.playerCastle} />
-        <Base x={SPAWN_X_ENEMY} hp={state.enemyBaseHp} maxHp={BASE_HP + (level * 200)} level={level} customUrl={stageAssets?.enemyCastle} />
+        {/* Zoom/Pan Interactive Indicators */}
+        <div className="absolute bottom-4 right-4 z-30 flex items-center gap-1 bg-black/70 backdrop-blur-md p-1.5 rounded-xl border border-white/10 text-[11px]">
+          <button 
+            onClick={handleZoomOut}
+            className="px-2 py-1 bg-white/5 hover:bg-white/15 rounded text-white font-bold transition-colors"
+          >
+            ZOOM -
+          </button>
+          <span className="font-mono px-1 font-bold text-emerald-400">{Math.round(zoom * 100)}%</span>
+          <button 
+            onClick={handleZoomIn}
+            className="px-2 py-1 bg-white/5 hover:bg-white/15 rounded text-white font-bold transition-colors"
+          >
+            ZOOM +
+          </button>
+          <button 
+            onClick={handleResetView}
+            className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 rounded font-bold transition-colors"
+          >
+            RESET
+          </button>
+        </div>
 
-        {/* Units */}
-        {state.units.map(u => (
-          <UnitView key={u.instanceId} unit={u} char={saveData.ownedCharacterDetails[u.charId] || STARTER_CHARACTERS.find(c => c.id === u.charId)!} />
-        ))}
-        {state.enemies.map(e => (
-          <EnemyView key={e.instanceId} enemy={e} enemyType={ENEMIES.find(et => et.id === e.enemyId)!} />
-        ))}
+        {/* View Instructions for Users */}
+        <div className="absolute bottom-4 left-4 z-30 text-[10px] text-white/40 pointer-events-none hidden sm:block">
+          Drag/Swipe to Pan ↔ ↕ | Scroll / Pinch to Zoom
+        </div>
 
-        {/* HUD Overlay */}
-        <div className="absolute top-8 left-8 right-8 flex justify-between items-start z-10">
-          <div className="flex flex-col gap-2">
+        {/* Interactive Game World Stage (Pans & Zooms dynamically) */}
+        <div 
+          style={{
+            transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+            transformOrigin: 'top left',
+            width: `${BATTLEFIELD_WIDTH}px`,
+            height: '420px',
+            position: 'absolute',
+            bottom: '80px',
+            left: '0',
+          }}
+          className="transition-transform duration-75 ease-out"
+        >
+          {/* Ground layer inside the scaling world */}
+          <div className="absolute bottom-0 left-0 w-full pointer-events-none">
+            <AnimeGround level={level} />
+          </div>
+          
+          {/* Bases */}
+          <Base x={SPAWN_X_PLAYER} hp={state.baseHp} maxHp={BASE_HP} level={level} isPlayer customUrl={stageAssets?.playerCastle} />
+          <Base x={SPAWN_X_ENEMY} hp={state.enemyBaseHp} maxHp={BASE_HP + (level * 200)} level={level} customUrl={stageAssets?.enemyCastle} />
+
+          {/* Units */}
+          {state.units.map(u => (
+            <UnitView key={u.instanceId} unit={u} char={saveData.ownedCharacterDetails[u.charId] || STARTER_CHARACTERS.find(c => c.id === u.charId)!} />
+          ))}
+          {state.enemies.map(e => (
+            <EnemyView key={e.instanceId} enemy={e} enemyType={ENEMIES.find(et => et.id === e.enemyId)!} />
+          ))}
+        </div>
+
+        {/* HUD Overlay (Static layer, does not transform) */}
+        <div className="absolute top-8 left-8 right-8 flex justify-between items-start z-10 pointer-events-none">
+          <div className="flex flex-col gap-2 pointer-events-auto">
             <div className="text-2xl font-black italic">STAGE {level}</div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-black/50 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10">
@@ -319,18 +500,18 @@ export default function Game({
 
           <button 
             onClick={() => setState(s => ({ ...s, isPaused: !s.isPaused }))}
-            className="p-4 bg-black/50 backdrop-blur-md rounded-full border border-white/10 hover:bg-white/10 transition-colors"
+            className="p-4 bg-black/50 backdrop-blur-md rounded-full border border-white/10 hover:bg-white/10 transition-colors pointer-events-auto"
           >
             {state.isPaused ? <Play /> : <Pause />}
           </button>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="h-48 bg-zinc-900 border-t border-white/10 p-6 flex gap-4 justify-center">
+      {/* Controls: Responsive flex-wrap and horizontal scrolling for narrow or portrait screens */}
+      <div className="h-44 bg-zinc-900 border-t border-white/10 p-4 flex gap-4 overflow-x-auto scrollbar-none items-center justify-start md:justify-center">
         {saveData.team.map((charId, i) => {
           const char = charId ? (saveData.ownedCharacterDetails[charId] || STARTER_CHARACTERS.find(c => c.id === charId)) : null;
-          if (!char) return <div key={i} className="w-32 h-full bg-white/5 rounded-2xl border border-dashed border-white/10" />;
+          if (!char) return <div key={i} className="w-28 h-32 shrink-0 bg-white/5 rounded-2xl border border-dashed border-white/10" />;
           
           const cd = state.cooldowns[char.id] || 0;
           const canAfford = state.money >= char.cost;
@@ -342,7 +523,7 @@ export default function Game({
               whileTap={isReady ? { scale: 0.95 } : {}}
               onClick={() => spawnUnit(char.id)}
               disabled={!isReady}
-              className={`w-32 h-full rounded-2xl border flex flex-col items-center justify-between p-3 relative overflow-hidden transition-all ${
+              className={`w-28 h-32 shrink-0 rounded-2xl border flex flex-col items-center justify-between p-2.5 relative overflow-hidden transition-all ${
                 isReady ? 'bg-white/10 border-emerald-500/50 cursor-pointer' : 'bg-black/40 border-white/5 opacity-50 cursor-not-allowed'
               }`}
             >
@@ -354,10 +535,10 @@ export default function Game({
                 />
               )}
               
-              <img src={char.gifUrl} className="w-16 h-16 object-contain" referrerPolicy="no-referrer" />
-              <div className="text-center">
-                <div className="text-[10px] font-bold uppercase opacity-50">{char.name}</div>
-                <div className="text-sm font-bold text-emerald-400">${char.cost}</div>
+              <SafeAnimeImage src={char.gifUrl} category="character" className="w-14 h-14 object-contain" />
+              <div className="text-center w-full">
+                <div className="text-[9px] font-bold uppercase opacity-50 truncate">{char.name}</div>
+                <div className="text-xs font-bold text-emerald-400">${char.cost}</div>
               </div>
             </motion.button>
           );
